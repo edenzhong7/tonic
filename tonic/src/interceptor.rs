@@ -1,4 +1,4 @@
-use crate::{Request, Status};
+use crate::{Request, Status, IntoRequest};
 use std::{fmt, sync::Arc};
 
 /// Represents a gRPC interceptor.
@@ -50,5 +50,44 @@ where
 impl fmt::Debug for Interceptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Interceptor").finish()
+    }
+}
+
+pub trait IntoInterceptor {
+    fn into_interceptor(self) -> Interceptor;
+}
+
+pub struct InterceptorChain {
+    chain: Vec<Interceptor>
+}
+
+impl InterceptorChain {
+    pub fn new() -> Self {
+        Self {
+            chain: vec![],
+        }
+    }
+
+    pub fn add(&mut self, f: impl Fn(Request<()>) -> Result<Request<()>, Status> + Send + Sync + 'static) {
+        self.chain.push(Interceptor::new(f))
+    }
+
+    pub(crate) fn call<T>(&self, req: Request<T>) -> Result<Request<T>, Status> {
+        let mut req = req;
+        for inter in self.chain.iter() {
+            match inter.call(req) {
+                Ok(new_req) => req = new_req,
+                Err(e) => return Err(e)
+            }
+        }
+        Ok(req)
+    }
+}
+
+impl IntoInterceptor for InterceptorChain {
+    fn into_interceptor(self) -> Interceptor {
+        Interceptor::new(move |req: Request<()>|-> Result<Request<()>, Status> {
+            self.call(req)
+        })
     }
 }

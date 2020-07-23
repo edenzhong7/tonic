@@ -99,7 +99,7 @@ pub use async_trait::async_trait;
 
 #[doc(inline)]
 pub use codec::Streaming;
-pub use interceptor::Interceptor;
+pub use interceptor::{Interceptor, InterceptorChain, IntoInterceptor};
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, Status};
