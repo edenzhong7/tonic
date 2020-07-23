@@ -1,50 +1,51 @@
+use std::env;
 use tonic::{transport::Server, Request, Response, Status};
+
+use hello_world::greeter_server::{Greeter, GreeterServer};
+use hello_world::{HelloReply, HelloRequest};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
 
-use hello_world::{
-    greeter_server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
-};
-
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    #[tracing::instrument]
     async fn say_hello(
         &self,
         request: Request<HelloRequest>,
     ) -> Result<Response<HelloReply>, Status> {
-        tracing::info!("received request");
+        println!("Got a request from {:?}", request.remote_addr());
 
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
-
-        tracing::debug!("sending response");
-
         Ok(Response::new(reply))
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
+    let args: Vec<String> = env::args().collect();
+    let enabled = args.get(1) == Some(&"enable".to_string());
 
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
-    tracing::info!(message = "Starting server.", %addr);
+    let optional_service = if enabled {
+        println!("MyGreeter enabled");
+        Some(GreeterServer::new(greeter))
+    } else {
+        println!("MyGreeter disabled");
+        None
+    };
+
+    println!("GreeterServer listening on {}", addr);
 
     Server::builder()
-        .trace_fn(|_| tracing::info_span!("helloworld_server"))
-        .add_service(GreeterServer::new(greeter))
+        .add_optional_service(optional_service)
         .serve(addr)
         .await?;
 
